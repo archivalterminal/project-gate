@@ -350,13 +350,16 @@ export default function Home() {
       return;
     }
 
-    setState({
-      progress: Number(row.progress),
-      target: Number(row.target),
-      gate_open: row.gate_open,
-      next_press_at: row.next_press_at,
-      can_press: false,
-    });
+setState({
+  progress: Number(row.progress),
+  target: Number(row.target),
+  gate_open: row.gate_open,
+  next_press_at: row.next_press_at,
+  can_press: false,
+  surge_active: row.surge_active,
+  surge_multiplier: Number(row.surge_multiplier),
+  surge_ends_at: row.surge_ends_at,
+});
 
     if (row.accepted) {
       playSuccessSound();
