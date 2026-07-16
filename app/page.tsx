@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { getOrCreateDeviceId } from "@/lib/device";
 import {
   playErrorSound,
   playPressSound,
@@ -208,29 +207,57 @@ export default function Home() {
   const [error, setError] = useState("");
   const sequenceTimerRef = useRef<number[]>([]);
   const previousFinalMessageRef = useRef("");
+  const previousSurgeActiveRef = useRef(false);
 
   const progressPercent = useMemo(() => {
     if (state.target <= 0) return 0;
     return Math.min((state.progress / state.target) * 100, 100);
   }, [state.progress, state.target]);
 
-  useEffect(() => {
-    setDeviceId(getOrCreateDeviceId());
+useEffect(() => {
+  let active = true;
 
-    return () => {
-      sequenceTimerRef.current.forEach(window.clearTimeout);
-    };
-  }, []);
+  async function initializeUser() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    let userId = session?.user?.id;
+
+    if (!userId) {
+      const { data, error: authError } =
+        await supabase.auth.signInAnonymously();
+
+      if (authError) {
+        console.error(authError);
+        setError("AUTHENTICATION FAILED");
+        setLoading(false);
+        return;
+      }
+
+      userId = data.user?.id;
+    }
+
+    if (active && userId) {
+      setDeviceId(userId);
+    }
+  }
+
+  initializeUser();
+
+  return () => {
+    active = false;
+    sequenceTimerRef.current.forEach(window.clearTimeout);
+  };
+}, []);
 
   useEffect(() => {
     if (!deviceId) return;
     let cancelled = false;
 
     async function loadState() {
-      const { data, error: loadError } = await supabase.rpc(
-        "get_gate_state",
-        { p_device_id: deviceId },
-      );
+      const { data, error: loadError } =
+        await supabase.rpc("get_gate_state_secure");
 
       if (cancelled) return;
 
@@ -246,9 +273,12 @@ export default function Home() {
         : undefined;
 
       if (row) {
-        if (row.surge_active && !state.surge_active) {
-  playSurgeSound();
-}
+        if (row.surge_active && !previousSurgeActiveRef.current) {
+          playSurgeSound();
+        }
+
+        previousSurgeActiveRef.current = row.surge_active;
+
         setState({
           ...row,
           progress: Number(row.progress),
@@ -327,10 +357,8 @@ export default function Home() {
     setPressing(true);
     setError("");
 
-    const { data, error: pressError } = await supabase.rpc(
-      "press_gate",
-      { p_device_id: deviceId },
-    );
+    const { data, error: pressError } =
+      await supabase.rpc("press_gate_secure");
 
     if (pressError) {
       playErrorSound();
